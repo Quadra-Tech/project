@@ -1,0 +1,8 @@
+{
+  "../../templates/default/lib/risc0-ethereum": {
+    "rev": "ef94105fbfbc2775d7a7f0c4773190e04cb67a04"
+  },
+  "lib/risc0-ethereum": {
+    "rev": "32aa0b6f23ddd02dd93fc71717667606e5c7db86"
+  }
+}

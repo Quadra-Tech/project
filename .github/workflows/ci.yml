@@ -1,0 +1,673 @@
+name: ci
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+env:
+  DOCKERFILE_PATH: crates/support/Dockerfile
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/e3-support
+  HARDHAT_VAR_MNEMONIC: "test test test test test test test test test test test junk"
+  HARDHAT_VAR_INFURA_API_KEY: "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+  PRIVATE_KEY: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  rust_unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust 1.86.0
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.86.0
+
+        # We must install foundry in order to be able to test anvil
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Install solc
+        run: |
+          sudo add-apt-repository ppa:ethereum/ethereum \
+          && sudo apt-get update -y \
+          && sudo apt-get install -y solc
+
+        # We need to setup node in order to compile the hardhat contracts to get the artifacts
+      - name: "Setup node"
+        uses: actions/setup-node@v3
+        with:
+          node-version: 22
+
+      - name: pnpm-setup
+        uses: pnpm/action-setup@v4
+
+      - name: Cache node modules
+        uses: actions/cache@v4
+        with:
+          path: "**/node_modules"
+          key: ${{ runner.os }}-modules-${{ hashFiles('**/pnpm-lock.yaml') }}
+      - name: "Install the dependencies"
+        run: "pnpm install"
+
+      - name: Checking code format ciphernode
+        run: pnpm ciphernode:lint
+
+      - name: Run tests
+        run: "pnpm ciphernode:test"
+
+  build_e3_support_risc0:
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate version tag
+        id: version
+        run: |
+          echo "version=$(git rev-parse --short=9 HEAD)" >> $GITHUB_OUTPUT
+      - name: Generate tags
+        id: tags
+        run: |
+          VERSION=$(git rev-parse --short=9 HEAD)
+          TAGS="${{ env.IMAGE_NAME }}:$VERSION"
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            TAGS="$TAGS,${{ env.IMAGE_NAME }}:latest"
+          fi
+          echo "tags=$TAGS" >> $GITHUB_OUTPUT
+      - name: Set up BuildKit
+        uses: docker/setup-buildx-action@v3
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./crates/support
+          file: ${{ env.DOCKERFILE_PATH }}
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          cache-from: |
+            type=gha,scope=cargo-registry
+            type=gha,scope=cargo-git
+            type=gha,scope=cargo-target
+            type=gha,scope=buildcache
+          cache-to: |
+            type=gha,mode=max,scope=cargo-registry
+            type=gha,mode=max,scope=cargo-git
+            type=gha,mode=max,scope=cargo-target
+            type=gha,mode=max,scope=buildcache
+
+  test_contracts:
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: "Check out the repo"
+        uses: "actions/checkout@v4"
+
+      - name: Install Rust 1.86.0
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.86.0
+          target: wasm32-unknown-unknown
+
+      - name: Install wasm-pack
+        uses: ./.github/actions/install-wasm-pack
+
+      - name: "Setup node"
+        uses: actions/setup-node@v3
+        with:
+          node-version: 22
+
+      - name: pnpm-setup
+        uses: pnpm/action-setup@v4
+
+      - name: Cache node modules
+        uses: actions/cache@v4
+        with:
+          path: "**/node_modules"
+          key: ${{ runner.os }}-modules-${{ hashFiles('**/pnpm-lock.yaml') }}
+
+      - name: "Install the dependencies"
+        run: "pnpm install"
+
+      - name: "Lint the code"
+        run: "pnpm evm:lint"
+
+      - name: "Add lint summary"
+        run: |
+          echo "## Lint results" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Passed" >> $GITHUB_STEP_SUMMARY
+
+      - name: "Test the contracts and generate the coverage report"
+        run: "pnpm coverage"
+
+      - name: "Add test summary"
+        run: |
+          echo "## Test results" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Passed" >> $GITHUB_STEP_SUMMARY
+
+  test_net:
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: "Check out the repo"
+        uses: "actions/checkout@v4"
+      - name: "Setup node"
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: pnpm-setup
+        uses: pnpm/action-setup@v4
+      - name: "Run network tests"
+        run: "pnpm test:integration net --no-prebuild"
+      - name: "Add test summary"
+        run: |
+          echo "## Network test results" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Passed" >> $GITHUB_STEP_SUMMARY
+
+  integration_prebuild:
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: "Check out the repo"
+        uses: "actions/checkout@v4"
+      - name: "Setup node"
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: pnpm-setup
+        uses: pnpm/action-setup@v4
+      - name: Install Rust 1.86.0
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.86.0
+      - name: Install Nargo
+        uses: noir-lang/noirup@v0.1.4
+        with:
+          toolchain: v1.0.0-beta.11
+      - name: Cache node modules
+        uses: actions/cache@v4
+        with:
+          path: "**/node_modules"
+          key: ${{ runner.os }}-modules-${{ hashFiles('**/pnpm-lock.yaml') }}
+      - name: "Install the dependencies"
+        run: "pnpm install"
+      - name: "Lint the code"
+        run: "pnpm lint"
+      - name: "Add lint summary"
+        run: |
+          echo "## Lint results" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Passed" >> $GITHUB_STEP_SUMMARY
+
+      - name: "Run prebuild"
+        run: "pnpm test:integration prebuild"
+      - name: "Verify build artifacts exist"
+        run: |
+          echo "Checking for build artifacts:"
+          ls -la target/debug/fake_encrypt || echo "fake_encrypt not found"
+          ls -la target/debug/pack_e3_params || echo "pack_e3_params not found"
+      - name: "Upload build artifacts"
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: |
+            target/debug/fake_encrypt
+            target/debug/pack_e3_params
+          if-no-files-found: error
+
+  ciphernode_integration_test:
+    needs: [integration_prebuild, build_enclave_cli]
+    runs-on: "ubuntu-latest"
+    strategy:
+      matrix:
+        test-suite: [base, persist]
+      fail-fast: false
+    steps:
+      - name: "Check out the repo"
+        uses: "actions/checkout@v4"
+      - name: "Setup node"
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: pnpm-setup
+        uses: pnpm/action-setup@v4
+      - name: Install Rust 1.86.0
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.86.0
+      - name: Cache node modules
+        uses: actions/cache@v4
+        with:
+          path: "**/node_modules"
+          key: ${{ runner.os }}-modules-${{ hashFiles('**/pnpm-lock.yaml') }}
+      - name: "Install the dependencies"
+        run: "pnpm install"
+      - name: "Download build artifacts"
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: target/debug/
+      - name: "Download enclave binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: enclave-binary
+          path: ~/.cargo/bin/
+      - name: "Download SDK artifacts"
+        uses: actions/download-artifact@v4
+        with:
+          name: sdk-artifacts
+          path: ./
+      - name: "Verify downloaded artifacts"
+        run: |
+          echo "Checking for required artifacts:"
+          ls -la target/debug/fake_encrypt || echo "fake_encrypt not found"
+          ls -la target/debug/pack_e3_params || echo "pack_e3_params not found"
+          ls -la ~/.cargo/bin/enclave || echo "enclave binary not found"
+          ls -la packages/enclave-contracts/dist || echo "SDK dist not found"
+          ls -la crates/wasm/dist || echo "WASM dist not found"
+      - name: "Set executable permissions"
+        run: |
+          chmod +x target/debug/fake_encrypt
+          chmod +x target/debug/pack_e3_params
+          chmod +x ~/.cargo/bin/enclave
+      - name: "Run ${{ matrix.test-suite }} tests"
+        run: "pnpm test:integration ${{ matrix.test-suite }} --no-prebuild"
+      - name: "Add test summary"
+        run: |
+          echo "## Test results for ${{ matrix.test-suite }}" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Passed" >> $GITHUB_STEP_SUMMARY
+
+  build_enclave_cli:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            templates/default/target/
+          key: rust-deps-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: rust-deps-
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.86.0
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/
+          key: rust-deps-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: rust-deps-
+      - name: Build enclave CLI
+        run: cargo install --locked --path crates/cli --bin enclave
+      - name: Upload enclave binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: enclave-binary
+          path: ~/.cargo/bin/enclave
+          retention-days: 1
+
+  crisp_e2e: 
+    runs-on: ubuntu-latest
+    needs: [build_enclave_cli]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Prepare test environment
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/examples/CRISP/test-results
+          sudo chmod -R 777 $GITHUB_WORKSPACE/examples/CRISP/test-results
+          mkdir -p $GITHUB_WORKSPACE/examples/CRISP/playwright-report
+          sudo chmod -R 777 $GITHUB_WORKSPACE/examples/CRISP/playwright-report
+          mkdir -p $GITHUB_WORKSPACE/examples/CRISP/.cache-synpress
+          sudo chown -R $USER_UID:$USER_GID $GITHUB_WORKSPACE/examples/CRISP/.cache-synpress
+          sudo chmod -R 777 $GITHUB_WORKSPACE/examples/CRISP/.cache-synpress
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10.7.1
+          run_install: false
+
+      # We must install foundry in order to be able to test anvil
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Install solc
+        run: |
+          sudo add-apt-repository ppa:ethereum/ethereum \
+          && sudo apt-get update -y \
+          && sudo apt-get install -y solc
+
+      - name: Install wasm-pack
+        uses: ./.github/actions/install-wasm-pack
+
+      - name: Install yq
+        run: |
+          sudo wget -qO- https://github.com/mikefarah/yq/releases/download/v4.45.1/yq_linux_amd64.tar.gz | sudo tar xz -C /usr/local/bin --transform='s|yq_linux_amd64|yq|' --no-same-owner
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        working-directory: .
+        run: |
+          pnpm --version && pnpm install --frozen-lockfile && pnpm build:ts
+
+      - name: Install Playwright browsers
+        working-directory: ./examples/CRISP
+        run: pnpm exec playwright install chromium
+
+      - name: Download enclave binary
+        uses: actions/download-artifact@v4
+        with:
+          name: enclave-binary
+          path: ~/.cargo/bin/
+
+      - name: Make binaries executable
+        run: |
+          chmod +x ~/.cargo/bin/enclave
+
+      - name: Run Playwright tests
+        working-directory: ./examples/CRISP
+        env:
+          PLAYWRIGHT_WORKERS: 4
+          METAMASK_VERSION: 11.8.2
+        run: pnpm test:e2e
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: ./examples/CRISP/playwright-report/
+          retention-days: 30
+
+  test_enclave_circuits:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Nargo
+        uses: noir-lang/noirup@v0.1.4
+        with:
+          toolchain: v1.0.0-beta.11
+
+      - name: Check formatting
+        working-directory: ./packages/circuits
+        run: nargo fmt --check
+
+      - name: Compile Noir circuits
+        working-directory: ./packages/circuits
+        run: |
+          nargo compile --workspace
+
+      - name: Test Noir circuits
+        working-directory: ./packages/circuits
+        run: |
+          nargo test --workspace
+
+      - name: Upload circuit artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: circuit-artifacts
+          path: packages/circuits/target/
+          retention-days: 1
+          if-no-files-found: warn
+
+  build_e3_support_dev:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            templates/default/target/
+          key: rust-deps-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: rust-deps-
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.86.0
+      - name: Build support scripts
+        run: cd templates/default && cargo build --locked --bin e3-support-scripts-dev
+      - name: Verify build artifacts
+        run: |
+          echo "Checking for support scripts binary:"
+          find templates/default/target/ -name "e3-support-scripts-dev" -type f -ls || echo "Binary not found"
+      - name: Upload support scripts artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: support-scripts-artifacts
+          path: templates/default/target/
+          retention-days: 1
+          if-no-files-found: error
+
+  build_sdk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Cache Node dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pnpm-store
+            node_modules
+          key: node-deps-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: node-deps-
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/
+          key: rust-deps-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: rust-deps-
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.86.0
+          targets: wasm32-unknown-unknown
+
+      - name: Install wasm-pack
+        uses: ./.github/actions/install-wasm-pack
+
+      - name: Install node dependencies
+        run: pnpm install
+
+      - name: Build the sdk
+        run: pnpm sdk:build
+
+      - name: Run the tests
+        run: pnpm sdk:test
+
+      - name: Upload SDK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-artifacts
+          path: |
+            packages/enclave-sdk/dist
+            packages/enclave-contracts/dist
+            packages/enclave-contracts/artifacts
+            packages/enclave-contracts/cache
+            packages/enclave-contracts/types
+            crates/wasm/dist
+          retention-days: 1
+          if-no-files-found: warn
+
+  template_integration:
+    runs-on: ubuntu-latest
+    needs: [build_enclave_cli, build_e3_support_dev, build_sdk]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.86.0
+      - name: Install node dependencies
+        run: pnpm install
+      - name: Download enclave binary
+        uses: actions/download-artifact@v4
+        with:
+          name: enclave-binary
+          path: ~/.cargo/bin/
+      - name: Download support scripts artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: support-scripts-artifacts
+          path: templates/default/target/
+      - name: Download SDK artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: sdk-artifacts
+          path: ./
+      - name: Make binaries executable
+        run: |
+          chmod +x ~/.cargo/bin/enclave
+          chmod +x templates/default/target/debug/e3-support-scripts-dev
+      - name: Verify downloaded artifacts
+        run: |
+          echo "Checking downloaded artifacts:"
+          ls -la ~/.cargo/bin/enclave || echo "enclave binary not found"
+          ls -la templates/default/target/debug/e3-support-scripts-dev || echo "support scripts not found"
+          ls -la packages/enclave-contracts/dist || echo "SDK dist not found"
+          ls -la crates/wasm/dist || echo "WASM dist not found"
+          echo "Support scripts permissions:"
+          ls -la templates/default/target/debug/e3-support-scripts-dev
+      - name: Test Template
+        run: |
+          cd templates/default
+          chmod 755 contracts tests
+          chmod 644 contracts/ImageID.sol
+          pnpm test:integration
+  
+  test_enclave_init:
+    runs-on: ubuntu-latest
+    needs: [build_enclave_cli, build_e3_support_dev]
+    steps:
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.7.1
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.86.0
+      - name: Download enclave binary
+        uses: actions/download-artifact@v4
+        with:
+          name: enclave-binary
+          path: ~/.cargo/bin/
+      - name: Make binaries executable
+        run: |
+          chmod +x ~/.cargo/bin/enclave
+      - name: Verify downloaded artifacts
+        run: |
+          ls -la ~/.cargo/bin/enclave || echo "enclave binary not found"
+      - name: Enclave init
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BRANCH="${{ github.head_ref }}"
+          else
+            BRANCH="${{ github.ref_name }}"
+          fi
+          enclave init mycitest --template=${{ github.server_url }}/${{ github.repository }}.git#${BRANCH}:templates/default
+
+  contrib-readme-job:
+    runs-on: ubuntu-latest
+    name: Populate Contributors List
+    # Only run on main branch to avoid branch conflicts
+    if: github.ref == 'refs/heads/main' && !contains(github.event.head_commit.message, 'contrib-readme-action')
+    concurrency:
+      group: contrib-readme-${{ github.ref }}
+      cancel-in-progress: true
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Contribute List
+        uses: akhilmhdh/contributors-readme-action@1ff4c56187458b34cd602aee93e897344ce34bfc
+        with:
+          image_size: 100
+          readme_path: README.md
+          use_username: false
+          columns_per_row: 6
+          collaborators: direct
+          commit_message: "docs(contributor): contrib-readme-action has updated readme"
+          committer_username: "github-actions[bot]"
+          committer_email: "github-actions[bot]@users.noreply.github.com"
+          auto_detect_branch_protection: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

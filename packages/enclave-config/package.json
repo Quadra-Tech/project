@@ -1,0 +1,25 @@
+{
+  "name": "@enclave-e3/config",
+  "version": "0.1.5",
+  "publishConfig": {
+    "access": "public"
+  },
+  "description": "Common configuration for Enclave",
+  "module": true,
+  "main": "index.js",
+  "type": "module",
+  "exports": {
+    "./tsup": "./tsup.config.js",
+    "./tsconfig.json": "./tsconfig.json",
+    "./dom.tsconfig.json": "./dom.tsconfig.json"
+  },
+  "scripts": {
+    "release": "pnpm publish --access=public"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "LGPL-3.0-only",
+  "peerDependencies": {
+    "tsup": "^8.5.0"
+  }
+}

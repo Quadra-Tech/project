@@ -1,0 +1,10 @@
+[package]
+name = "crisp_circuit"
+type = "bin"
+version = "0.1.0"
+authors = ["Gnosis Guild / Enclave"]
+license = "MIT"
+
+[dependencies]
+greco = { path = "../../../packages/circuits/crates/libs/greco" }
+polynomial = { path = "../../../packages/circuits/crates/libs/polynomial" }

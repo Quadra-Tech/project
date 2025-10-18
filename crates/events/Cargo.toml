@@ -1,0 +1,24 @@
+[package]
+name = "e3-events"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Event management for E3 Ciphernodes"
+repository = "https://github.com/gnosisguild/enclave/crates/events"
+
+[dependencies]
+actix = { workspace = true }
+alloy = { workspace = true }
+alloy-primitives = { workspace = true }
+alloy-sol-types = { workspace = true }
+anyhow = { workspace = true }
+bincode = { workspace = true }
+bloom = { workspace = true }
+bs58 = { workspace = true }
+chrono = { workspace = true }
+futures-util = { workspace = true }
+once_cell = { workspace = true }
+serde = { workspace = true }
+sha2 = { workspace = true }
+tracing = { workspace = true }
+e3-crypto = { workspace = true }

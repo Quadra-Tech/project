@@ -1,0 +1,4 @@
+*.bin
+plaintext.txt
+*.hex
+*.db
