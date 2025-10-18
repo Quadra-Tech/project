@@ -22,7 +22,7 @@
 ## Developer Journey (rate 1–5)
 
 * Getting started guide: [ ]1 [X]2 [ ]3 [ ]4 [ ]5
-* Error messages/Debuggability: [ ]1 [ ]2 [ ]3 [ ]4 [ ]5
+* Error messages/Debuggability: [ ]1 [X]2 [ ]3 [ ]4 [ ]5
 * Local dev loop (build/run/test): [ ]1 [X]2 [ ]3 [ ]4 [ ]5
 * Sample apps/templates quality: [ ]1 [X]2 [ ]3 [ ]4 [ ]5
 
