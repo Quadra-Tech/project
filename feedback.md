@@ -1,5 +1,5 @@
 
-# hackathon-feedback.md — QuadraTech × Enclave
+# hackathon-feedback.md - QuadraTech × Enclave
 
 **Event:** ETH Rome 2025
 
