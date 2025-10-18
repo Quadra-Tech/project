@@ -30,7 +30,7 @@
 ## DX Wishlist 
 
 * End‑to‑end quickstart (vote → tally → proof → verify) in <10 min
-* Local mock to unit‑test logic without remote infra
+* Local mock to fully test the project
 * Clear repo to boostrap a project
 * Minimal reference UI for QF rounds (plug‑and‑play)
 
