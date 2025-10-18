@@ -6,7 +6,7 @@
 ## What Worked Well
 
 * Technical support during the hackathon
-* The tech is really intersting
+* The tech is really interesting
 * More Decentralized than MACI
 
 ## What Didn’t Work / Frictions
@@ -14,9 +14,10 @@
 * Documentation not up to date
 * Package installation not compatible with Mac M3 & M4 & Debian 13
 * We did not know which repo to use to start
-* Runtime issues (latency, crashes, edge cases)
+* Runtime issues (latency, crashes)
 * Dependency installation not clearly indicated
 * Front end demo not fully working, Vote are not showing
+* Problem with zsh
 
 
 ## Developer Journey (rate 1–5)
@@ -30,9 +31,7 @@
 ## DX Wishlist 
 
 * End‑to‑end quickstart (vote → tally → proof → verify) in <10 min
-* Local mock to fully test the project
 * Clear repo to boostrap a project
-* Minimal reference UI for QF rounds (plug‑and‑play)
 
 
 ### Idea Bank
