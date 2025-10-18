@@ -1,5 +1,5 @@
 
-# hackathon-feedback.md — QuadraTech × Enclave (E3)
+# hackathon-feedback.md — QuadraTech × Enclave
 
 ---
 
