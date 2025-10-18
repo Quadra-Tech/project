@@ -1,24 +1,18 @@
 
 # hackathon-feedback.md — QuadraTech × Enclave
 
----
-
 **Event:** ETH Rome 2025
-
----
 
 ## What Worked Well
 
-* [x] Technical support during the hackathon
-* [x] The tech is really intersting
-* [x] More Decentralized than MACI
-
----
+* Technical support during the hackathon
+* The tech is really intersting
+* More Decentralized than MACI
 
 ## What Didn’t Work / Frictions
 
-* [ ] Documentation not up to date
-* [ ] Package installation not compatible with Mac M3 & M4 & Debian 13
+* Documentation not up to date
+* Package installation not compatible with Mac M3 & M4 & Debian 13
 * [ ] We did not know which repo to use to start
 * [ ] Runtime issues (latency, crashes, edge cases)
 * [ ] Dependency installation not clearly indicated
