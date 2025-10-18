@@ -13,12 +13,10 @@
 
 * Documentation not up to date
 * Package installation not compatible with Mac M3 & M4 & Debian 13
-* [ ] We did not know which repo to use to start
-* [ ] Runtime issues (latency, crashes, edge cases)
-* [ ] Dependency installation not clearly indicated
-* [ ] Front end demo not fully working, Vote are not showing
-
----
+* We did not know which repo to use to start
+* Runtime issues (latency, crashes, edge cases)
+* Dependency installation not clearly indicated
+* Front end demo not fully working, Vote are not showing
 
 
 ## Developer Journey (rate 1–5)
@@ -28,7 +26,6 @@
 * Local dev loop (build/run/test): [ ]1 [X]2 [ ]3 [ ]4 [ ]5
 * Sample apps/templates quality: [ ]1 [X]2 [ ]3 [ ]4 [ ]5
 
----
 
 ## DX Wishlist 
 
@@ -37,7 +34,6 @@
 * Clear repo to boostrap a project
 * Minimal reference UI for QF rounds (plug‑and‑play)
 
----
 
 ### Idea Bank
 
